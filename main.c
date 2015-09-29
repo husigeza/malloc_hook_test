@@ -5,10 +5,10 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/time.h>
+#include <semaphore.h>
 
-
-#define time_measure
-//#define thread_safe
+//#define time_measure
+#define thread_safe
 //#define modify_malloc_hook
 
 
@@ -19,6 +19,9 @@ static void *my_malloc_hook_1 (size_t, const void *);
 static void *my_malloc_hook_2 (size_t, const void *);
 
 
+static void *old_free_hook;
+static void *my_free_hook_0 (void *, const void *);
+
 
 
 pthread_t tid[3];
@@ -27,23 +30,19 @@ void* Thread_0(void *arg)
 {
     int i,j=0;
     int *pointer_0;
-    int counter = 0;
 
     int argument = (int)arg;
 
 
-    for(i=0;i<100;i++) {
+    for(i=0;i<100;i++)
+    {
         __malloc_hook = my_malloc_hook_0;
-        pointer_0 = (int *)malloc(sizeof(int));
         printf("Thread %d, malloc %d\n",argument,i);
-        counter++;
+        pointer_0 = (int *)malloc(sizeof(int));
         free(pointer_0);
-        for(j=0;j<1000;j++) {}
-        }
+        usleep(500);
+    }
 
-
-    printf("Thread %d counter = %d\n",argument,counter);
-    //counter = 0;
     return NULL;
 
 }
@@ -82,14 +81,32 @@ void* Thread_2(void *arg)
 
 //void (*volatile __malloc_initialize_hook) (void) = my_init_hook;
 
+static int malloc_hook_counter = 0;
+static sem_t mutex;
+
 static void *
 my_malloc_hook_0 (size_t size, const void *caller)
 {
-  //printf("Malloc hook 0\n");
-  __malloc_hook  = old_malloc_hook;
-  malloc(size);
-  __malloc_hook = my_malloc_hook_0;
-  return;
+      //printf("Malloc hook 0\n");
+      __malloc_hook  = old_malloc_hook;
+      malloc(size);
+      __malloc_hook = my_malloc_hook_0;
+
+    sem_wait(&mutex);
+      malloc_hook_counter++;
+      printf("malloc_hook_counter = %d\n",malloc_hook_counter);
+    sem_post(&mutex);
+
+      return;
+}
+
+static void *
+my_free_hook_0 (void *ptr, const void *caller)
+{
+    __free_hook = old_free_hook;
+    free(ptr);
+    __free_hook = my_free_hook_0;
+    return;
 }
 
 static void *
@@ -115,8 +132,7 @@ my_malloc_hook_2 (size_t size, const void *caller)
 
 int main()
 {
-int err;
-    //old_malloc_hook = __malloc_hook;
+    int err;
     int i,j = 0;
     int *pointer_main;
 
@@ -124,11 +140,14 @@ int err;
     struct timeval tval_before_custom, tval_after_custom, tval_result_custom;
 
     old_malloc_hook = __malloc_hook;
+    old_free_hook = __free_hook;
 
     printf("Started...\n");
 
 
 #ifdef thread_safe
+
+    sem_init(&mutex, 0, 1);
 
     err = pthread_create(&(tid[0]), NULL, &Thread_0, 1);
     if (err != 0)
@@ -136,7 +155,7 @@ int err;
     else
         printf("\n Thread %d created successfully\n",(int)tid[0]);
 
-    printf("\n After creating 1. thread, before creating 2. thread\n");
+    printf("\n Created Thread 1\n");
 
     err = pthread_create(&(tid[1]), NULL, &Thread_0, 2);
     if (err != 0)
@@ -144,7 +163,10 @@ int err;
     else
         printf("\n Thread %d created successfully\n",(int)tid[1]);
 
-    while(1);
+    printf("\n Created Thread 2\n");
+
+    getchar();
+    sem_destroy(&mutex);
 #endif // thread_safe
 
 #ifdef time_measure
@@ -153,7 +175,7 @@ int err;
 
         gettimeofday(&tval_before_standard, NULL);
 
-        for(i=0;i<10000;i++) {
+        for(i=0;i<100000;i++) {
                 pointer_main = (int *)malloc(sizeof(int));
                 free(pointer_main);
         }
@@ -166,9 +188,10 @@ int err;
 
 
         __malloc_hook = my_malloc_hook_0;
+        __free_hook = my_free_hook_0;
         gettimeofday(&tval_before_custom, NULL);
 
-        for(i=0;i<10000;i++) {
+        for(i=0;i<100000;i++) {
                 pointer_main = (int *)malloc(sizeof(int));
                 free(pointer_main);
         }
@@ -179,7 +202,18 @@ int err;
 
         printf("Time elapsed with CUSTOM malloc:   %ld.%06ld\n", (long int)tval_result_custom.tv_sec, (long int)tval_result_custom.tv_usec);
 
-        printf("Time difference: %06ld ms\n\n",(long int)tval_result_custom.tv_usec-(long int)tval_result_standard.tv_usec);
+        long int sec_standard = (long int)tval_result_standard.tv_sec;
+        long int total_usec_standard = sec_standard * 10^6 + (long int)tval_result_standard.tv_usec;
+
+        long int sec_custom = (long int)tval_result_custom.tv_sec;
+        long int total_usec_custom = sec_custom * 10^6 + (long int)tval_result_custom.tv_usec;
+
+        printf("total_usec_standard = %ld\n",total_usec_standard);
+        printf("total_usec_custom = %ld\n",total_usec_custom);
+        double ratio = ((double)total_usec_custom) / ((double)total_usec_standard);
+
+        printf("Time difference: %06ld ms\n",(long int)tval_result_custom.tv_usec-(long int)tval_result_standard.tv_usec);
+        printf("Time needed: %1.7f more\n\n",ratio);
 
 
         __malloc_hook  = old_malloc_hook;
