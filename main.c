@@ -7,7 +7,7 @@
 
 //Set up what to print
 //#define time_measure_1_thread_print_per_interation
-//#define time_measure_1_thread_print_per_test_cycle
+#define time_measure_1_thread_print_per_test_cycle
 
 //Collect statistics about time differences, only works when perftool_standard_test and perftool_custom_test are defined
 #define need_statistic
@@ -20,6 +20,7 @@
 //What test case do we need to be analyzed by a performance tool
 #define perftool_standard_test
 #define perftool_custom_test
+
 
 /* Prototypes for our hooks.  */
 static void *old_malloc_hook;
@@ -53,19 +54,23 @@ my_free_hook_0 (void *ptr, const void *caller)
 
 int main()
 {
-    int err;
+
     int i,j,k = 0;
     int *pointer_main;
 
-    long int sec_standard, total_usec_standard;
-    long int sec_custom, total_usec_custom;
-    double ratio, ratio_sum_interation, ratio_sum_test_cycle;
+    #ifdef perftool_custom_test
+        #ifdef perftool_standard_test
+            long int sec_standard, total_usec_standard;
+            long int sec_custom, total_usec_custom;
+            double ratio, ratio_sum_interation, ratio_sum_test_cycle;
 
-    struct timeval tval_before_standard, tval_after_standard, tval_result_standard;
-    struct timeval tval_before_custom, tval_after_custom, tval_result_custom;
+            struct timeval tval_before_standard, tval_after_standard, tval_result_standard;
+            struct timeval tval_before_custom, tval_after_custom, tval_result_custom;
+        #endif // perftool_standard_test
 
-    old_malloc_hook = __malloc_hook;
-    old_free_hook = __free_hook;
+        old_malloc_hook = __malloc_hook;
+        old_free_hook = __free_hook;
+    #endif
 
     printf("Started...\n");
 
@@ -76,19 +81,24 @@ int main()
 
 
         #ifdef perftool_standard_test
+
+            #ifdef perftool_custom_test
             __malloc_hook  = old_malloc_hook;
             __free_hook = old_free_hook;
 
             gettimeofday(&tval_before_standard, NULL);
+            #endif // perftool_custom_test
 
             for(i=1;i<=num_of_mallocs;i++) {
                 pointer_main = (int *)malloc(sizeof(int));
                 free(pointer_main);
             }
 
-            gettimeofday(&tval_after_standard, NULL);
+            #ifdef perftool_custom_test
+                gettimeofday(&tval_after_standard, NULL);
+                timersub(&tval_after_standard, &tval_before_standard, &tval_result_standard);
+            #endif // perftool_custom_test
 
-            timersub(&tval_after_standard, &tval_before_standard, &tval_result_standard);
         #endif // perftool_standard_test
 
         #ifdef perftool_custom_test
@@ -96,16 +106,19 @@ int main()
             __malloc_hook = my_malloc_hook_0;
             __free_hook = my_free_hook_0;
 
-            gettimeofday(&tval_before_custom, NULL);
+            #ifdef perftool_standard_test
+                gettimeofday(&tval_before_custom, NULL);
+            #endif // perftool_standard_test
 
             for(i=1;i<=num_of_mallocs;i++) {
                 pointer_main = (int *)malloc(sizeof(int));
                 free(pointer_main);
             }
 
-            gettimeofday(&tval_after_custom, NULL);
-
-            timersub(&tval_after_custom, &tval_before_custom, &tval_result_custom);
+            #ifdef perftool_standard_test
+                gettimeofday(&tval_after_custom, NULL);
+                timersub(&tval_after_custom, &tval_before_custom, &tval_result_custom);
+            #endif // perftool_standard_test
         #endif // perftool_custom_test
 
         #ifdef need_statistic
