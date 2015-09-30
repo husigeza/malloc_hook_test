@@ -7,7 +7,7 @@
 
 //Set up what to print
 //#define time_measure_1_thread_print_per_interation
-#define time_measure_1_thread_print_per_test_cycle
+//#define time_measure_1_thread_print_per_test_cycle
 
 //Collect statistics about time differences, only works when perftool_standard_test and perftool_custom_test are defined
 #define need_statistic
@@ -70,6 +70,9 @@ int main()
 
         old_malloc_hook = __malloc_hook;
         old_free_hook = __free_hook;
+        __malloc_hook = my_malloc_hook_0;
+        __free_hook = my_free_hook_0;
+
     #endif
 
     printf("Started...\n");
@@ -103,10 +106,9 @@ int main()
 
         #ifdef perftool_custom_test
 
-            __malloc_hook = my_malloc_hook_0;
-            __free_hook = my_free_hook_0;
-
             #ifdef perftool_standard_test
+                __malloc_hook = my_malloc_hook_0;
+                __free_hook = my_free_hook_0;
                 gettimeofday(&tval_before_custom, NULL);
             #endif // perftool_standard_test
 
